@@ -145,7 +145,9 @@ public:
 #endif
 private:
     void ReadStyleSettings();
+    // Will apply the style to all running sessions
     void ApplyClosedCaptionsStyle(const ClosedCaptionsStyle &style);
+    // Will apply the style unless the session already has a custom styling
     void ApplyClosedCaptionsStyle(RenderSession &session, const SubttxClosedCaptionsStyle &style);
 
     // Call with mConfigMutex taken
@@ -171,7 +173,6 @@ private:
     // Call with mConfigMutex taken
     void WriteTtmlStyleOverrides(const string &style);
     void ApplyTtmlStyleOverrides(const string &style);
-    bool ApplyTtmlStyleOverrides(RenderSession &session, const string &style);
     void RaiseOnTtmlStyleOverridesChanged(const string &style);
 
     struct SessionInfo {
