@@ -19,6 +19,7 @@
  */
 
 #include "TextTrack.h"
+
 #include <interfaces/IConfiguration.h>
 
 namespace WPEFramework {

@@ -34,6 +34,7 @@
 #endif
 
 #include <subttxrend/ctrl/CcSubController.hpp>
+#include <subttxrend/ctrl/Configuration.hpp>
 #include <subttxrend/ctrl/DvbSubController.hpp>
 #include <subttxrend/ctrl/ScteSubController.hpp>
 #include <subttxrend/ctrl/TtmlController.hpp>
@@ -57,8 +58,6 @@
 #include <subttxrend/protocol/PacketWebvttSelection.hpp>
 #include <subttxrend/protocol/PacketWebvttTimestamp.hpp>
 #include <subttxrend/socksrc/UnixSocketSourceFactory.hpp>
-
-#include <subttxrend/ctrl/Configuration.hpp>
 
 namespace WPEFramework {
 namespace Plugin {
@@ -268,7 +267,7 @@ bool RenderSession::sendData(DataType type, const std::string &data, int64_t off
         case DataType::WEBVTT: {
             bp.type(Packet::Type::WEBVTT_DATA);
             // subttxrend-webvtt interprets positive as "earlier". We flip that.
-	    offsetMs = -offsetMs;
+            offsetMs = -offsetMs;
             bp(offsetMs & UINT32_MAX)(offsetMs >> 32); // 64-bit display-offset
             break;
         }
@@ -302,8 +301,7 @@ void RenderSession::sendTimestamp(uint64_t iMediaTimestampMs) {
             onPacketReceived(mParser.parse(bp));
             break;
         }
-        default:
-            ; // Unhandled
+        default:; // Unhandled
     }
 }
 
@@ -461,9 +459,7 @@ void RenderSession::processLoop() {
 }
 
 void RenderSession::onPacketReceived(const subttxrend::protocol::Packet &packet) {
-    {
-        doOnPacketReceived(packet);
-    }
+    doOnPacketReceived(packet);
     mRenderCond.notify_one();
 }
 
@@ -720,16 +716,14 @@ bool RenderSession::isDataQueued() const {
 
 #if TEXTTRACK_WITH_CCHAL
 extern "C" {
-    // The callbacks we need for CC HAL
-    void dataCallback(void *context, int decoderIndex, VL_CC_DATA_TYPE eType,
-                                 unsigned char* ccData, unsigned dataLength,
-                                 int sequenceNumber, long long localPts) {
-        if (dataLength > 0) {
-            reinterpret_cast<RenderSession *>(context)->sendData(RenderSession::DataType::CC, std::string(reinterpret_cast<char *>(ccData), dataLength), 0);
-        }
+// The callbacks we need for CC HAL
+void dataCallback(void *context, int decoderIndex, VL_CC_DATA_TYPE eType, unsigned char *ccData, unsigned dataLength, int sequenceNumber, long long localPts) {
+    if (dataLength > 0) {
+        reinterpret_cast<RenderSession *>(context)->sendData(RenderSession::DataType::CC, std::string(reinterpret_cast<char *>(ccData), dataLength), 0);
     }
-    void decodeCallback(void *context, int decoderIndex, int event) {
-    }
+}
+void decodeCallback(void *context, int decoderIndex, int event) {
+}
 }
 
 bool RenderSession::associateVideoDecoder(const std::string &handle) {

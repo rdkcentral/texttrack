@@ -121,7 +121,6 @@ public:
     bool associateVideoDecoder(const std::string &handle);
     void dissociateVideoDecoder();
 #endif
-
 private:
     using LockGuard = std::lock_guard<std::mutex>;
     using UniqueLock = std::unique_lock<std::mutex>;
