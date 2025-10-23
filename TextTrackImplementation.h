@@ -31,9 +31,9 @@
 
 #include <condition_variable>
 #include <optional>
-
 #include <subttxrend/ctrl/Configuration.hpp>
 #include <subttxrend/ctrl/Options.hpp>
+
 #include "TextTrackConfiguration.h"
 
 // Sanity check
@@ -47,9 +47,12 @@ namespace Plugin {
 class RenderSession;
 class SubttxClosedCaptionsStyle;
 
-class TextTrackImplementation : public Exchange::ITextTrack, public Exchange::ITextTrackClosedCaptionsStyle, public Exchange::IConfiguration
+class TextTrackImplementation : public Exchange::ITextTrack,
+                                public Exchange::ITextTrackClosedCaptionsStyle,
+                                public Exchange::IConfiguration
 #if ITEXTTRACK_VERSION >= 2
-, public Exchange::ITextTrackTtmlStyle
+    ,
+                                public Exchange::ITextTrackTtmlStyle
 #endif
 {
 public:
@@ -136,11 +139,10 @@ public:
     Core::hresult Unregister(const ITextTrackTtmlStyle::INotification *notification) override;
 
     Core::hresult SetTtmlStyleOverrides(const string &style) override;
-    Core::hresult GetTtmlStyleOverrides(string& style) const override;
+    Core::hresult GetTtmlStyleOverrides(string &style) const override;
 
     // @}
 #endif
-
 private:
     void ReadStyleSettings();
     void ApplyClosedCaptionsStyle(const ClosedCaptionsStyle &style);
@@ -205,7 +207,7 @@ private:
     typedef WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement> LinkType;
     LinkType *mpRdkShell{nullptr};
 
-    bool EnsureDisplayIsCreated(std::string const &displayName);
+    bool EnsureDisplayIsCreated(const std::string &displayName);
 #endif
 };
 

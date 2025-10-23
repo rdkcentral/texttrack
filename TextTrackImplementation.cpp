@@ -23,11 +23,11 @@
 #include <syscall.h>
 #include <tracing/Logging.h>
 
+#include <fstream>
 #include <subttxrend/cc/CcCommand.hpp>
 #include <subttxrend/common/LoggerManager.hpp>
 
 #include "RenderSession.h"
-#include <fstream>
 
 #if TEXTTRACK_WITH_RDKSHELL
 // Assuming that use of RDKShell is only on devices with Thunder security enabled
@@ -110,8 +110,7 @@ public:
 class SubttxClosedCaptionsStyle {
 public:
     explicit SubttxClosedCaptionsStyle(const Exchange::ITextTrackClosedCaptionsStyle::ClosedCaptionsStyle &style)
-        :
-          fontColor(fParseRgbColor(style.fontColor)),
+        : fontColor(fParseRgbColor(style.fontColor)),
           fontOpacity(fConvertOpacity(style.fontOpacity)),
           fontStyle(fConvertFontFamily(style.fontFamily)),
           fontSize(fConvertFontSize(style.fontSize)),
@@ -163,26 +162,16 @@ private:
         }
         return CONTENT_DEFAULT;
     }
-    static constexpr uint32_t fConvertFontSize(Exchange::ITextTrackClosedCaptionsStyle::FontSize size) {
-        return static_cast<uint32_t>(size);
-    }
-    static constexpr uint32_t fConvertFontEdge(Exchange::ITextTrackClosedCaptionsStyle::FontEdge edge) {
-        return static_cast<uint32_t>(edge);
-    }
+    static constexpr uint32_t fConvertFontSize(Exchange::ITextTrackClosedCaptionsStyle::FontSize size) { return static_cast<uint32_t>(size); }
+    static constexpr uint32_t fConvertFontEdge(Exchange::ITextTrackClosedCaptionsStyle::FontEdge edge) { return static_cast<uint32_t>(edge); }
 };
 
 SERVICE_REGISTRATION(TextTrackImplementation, 1, 0);
 
 constexpr const uint ARGC = 2;
-const char *args[ARGC] = {
-	"TextTrack",
-	"--config-file-path=" TEXTTRACK_CONFIG_FILE_PATH
-};
+const char *args[ARGC] = {"TextTrack", "--config-file-path=" TEXTTRACK_CONFIG_FILE_PATH};
 
-TextTrackImplementation::TextTrackImplementation()
-    : mOptions(ARGC, const_cast<char **>(args)),
-      mConfiguration(mOptions)
-{
+TextTrackImplementation::TextTrackImplementation() : mOptions(ARGC, const_cast<char **>(args)), mConfiguration(mOptions) {
     // Setup logging etc
     subttxrend::common::LoggerManager::getInstance()->init(&mConfiguration.getLoggerConfig());
 }
@@ -303,7 +292,8 @@ Core::hresult TextTrackImplementation::Configure(PluginHost::IShell *shell) {
     if (!persistentStorePluginName.empty()) {
         const Core::hresult configResult = mConfigPlugin.Open(RPC::CommunicationTimeOut, mConfigPlugin.Connector(), persistentStorePluginName);
         if (configResult != Core::ERROR_NONE) {
-            TRACE(Trace::Error, (_T("Could not open PersistentStore '%s' error=%u msg=%s"), persistentStorePluginName.c_str(), configResult, Core::ErrorToString(configResult)));
+            TRACE(Trace::Error, (_T("Could not open PersistentStore '%s' error=%u msg=%s"), persistentStorePluginName.c_str(), configResult,
+                                 Core::ErrorToString(configResult)));
             return Core::ERROR_GENERAL;
         }
         if (!mConfigPlugin.IsOperational()) {
@@ -338,7 +328,7 @@ Core::hresult TextTrackImplementation::Configure(PluginHost::IShell *shell) {
 }
 
 #if TEXTTRACK_WITH_RDKSHELL
-bool TextTrackImplementation::EnsureDisplayIsCreated(std::string const &displayName) {
+bool TextTrackImplementation::EnsureDisplayIsCreated(const std::string &displayName) {
     TRACE(Trace::Information, (_T("Ensure Display %s with RDKShell"), displayName.c_str()));
     if (!mpRdkShell) {
         std::string securityToken;
