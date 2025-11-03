@@ -184,8 +184,9 @@ TextTrackImplementation::~TextTrackImplementation() {
 }
 
 Core::hresult TextTrackImplementation::Register(ITextTrackClosedCaptionsStyle::INotification *notification) {
+    std::unique_lock lockCfg{mConfigMutex};
+    std::unique_lock lockNtf{mNotificationMutex};
     {
-        std::unique_lock lock{mNotificationMutex};
         auto exists = std::find(mNotificationCallbacks.begin(), mNotificationCallbacks.end(), notification);
         if (exists == mNotificationCallbacks.end()) {
             mNotificationCallbacks.emplace_back(notification);
@@ -193,7 +194,6 @@ Core::hresult TextTrackImplementation::Register(ITextTrackClosedCaptionsStyle::I
         }
     }
     {
-        std::unique_lock lock{mConfigMutex};
         ClosedCaptionsStyle style;
         ReadClosedCaptionsStyle(style);
         notification->OnClosedCaptionsStyleChanged(style);
@@ -222,8 +222,9 @@ Core::hresult TextTrackImplementation::Unregister(const ITextTrackClosedCaptions
 
 #if ITEXTTRACK_VERSION >= 2
 Core::hresult TextTrackImplementation::Register(ITextTrackTtmlStyle::INotification *notification) {
+    std::unique_lock lockCfg{mConfigMutex};
+    std::unique_lock lockNtf{mNotificationMutex};
     {
-        std::unique_lock lock{mNotificationMutex};
         auto exists = std::find(mTtmlCallbacks.begin(), mTtmlCallbacks.end(), notification);
         if (exists == mTtmlCallbacks.end()) {
             mTtmlCallbacks.emplace_back(notification);
@@ -231,7 +232,6 @@ Core::hresult TextTrackImplementation::Register(ITextTrackTtmlStyle::INotificati
         }
     }
     {
-        std::unique_lock lock{mConfigMutex};
         string style;
         ReadTtmlStyleOverrides(style);
         notification->OnTtmlStyleOverridesChanged(style);
@@ -250,6 +250,7 @@ Core::hresult TextTrackImplementation::Unregister(const ITextTrackTtmlStyle::INo
 }
 #endif
 
+// Called during single-threaded initialization only
 Core::hresult TextTrackImplementation::Configure(PluginHost::IShell *shell) {
     mPluginConfig.FromString(shell->ConfigLine());
 
@@ -475,13 +476,16 @@ void TextTrackImplementation::WriteTtmlStyleOverrides(const string &style) {
 // Functions from ITextTrackClosedCaptionsStyle interface
 
 Core::hresult TextTrackImplementation::SetClosedCaptionsStyle(const ClosedCaptionsStyle &style) {
-    std::unique_lock lock{mConfigMutex};
-    ClosedCaptionsStyle oldStyle;
-    ReadClosedCaptionsStyle(oldStyle);
-    ApplyClosedCaptionsStyle(style);
-    if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
-        WriteClosedCaptionsStyle(style);
+    std::unique_lock lockSes{mSessionsMutex};
+    {
+        std::unique_lock lockCfg{mConfigMutex};
+        ClosedCaptionsStyle oldStyle;
+        ReadClosedCaptionsStyle(oldStyle);
+        if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
+            WriteClosedCaptionsStyle(style);
+        }
     }
+    ApplyClosedCaptionsStyle(style);
     return Core::ERROR_NONE;
 }
 
@@ -540,15 +544,19 @@ bool TextTrackImplementation::CheckWhetherClosedCaptionsStyleChanged(const Close
 }
 
 Core::hresult TextTrackImplementation::SetFontFamily(const FontFamily font) {
-    std::unique_lock lock{mConfigMutex};
-    ClosedCaptionsStyle oldStyle;
-    ReadClosedCaptionsStyle(oldStyle);
-    ClosedCaptionsStyle style = oldStyle;
-    style.fontFamily = font;
-    ApplyClosedCaptionsStyle(style);
-    if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
-        WriteClosedCaptionsStyle(style);
+    std::unique_lock lockSes{mSessionsMutex};
+    ClosedCaptionsStyle style;
+    {
+        std::unique_lock lockCfg{mConfigMutex};
+        ClosedCaptionsStyle oldStyle;
+        ReadClosedCaptionsStyle(oldStyle);
+        style = oldStyle;
+        style.fontFamily = font;
+        if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
+            WriteClosedCaptionsStyle(style);
+        }
     }
+    ApplyClosedCaptionsStyle(style);
     return Core::ERROR_NONE;
 }
 
@@ -561,15 +569,19 @@ Core::hresult TextTrackImplementation::GetFontFamily(FontFamily &font) const {
 }
 
 Core::hresult TextTrackImplementation::SetFontSize(const FontSize size) {
-    std::unique_lock lock{mConfigMutex};
-    ClosedCaptionsStyle oldStyle;
-    ReadClosedCaptionsStyle(oldStyle);
-    ClosedCaptionsStyle style = oldStyle;
-    style.fontSize = size;
-    ApplyClosedCaptionsStyle(style);
-    if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
-        WriteClosedCaptionsStyle(style);
+    std::unique_lock lockSes{mSessionsMutex};
+    ClosedCaptionsStyle style;
+    {
+        std::unique_lock lockCfg{mConfigMutex};
+        ClosedCaptionsStyle oldStyle;
+        ReadClosedCaptionsStyle(oldStyle);
+        style = oldStyle;
+        style.fontSize = size;
+        if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
+            WriteClosedCaptionsStyle(style);
+        }
     }
+    ApplyClosedCaptionsStyle(style);
     return Core::ERROR_NONE;
 }
 
@@ -582,15 +594,19 @@ Core::hresult TextTrackImplementation::GetFontSize(FontSize &size) const {
 }
 
 Core::hresult TextTrackImplementation::SetFontColor(const string &color) {
-    std::unique_lock lock{mConfigMutex};
-    ClosedCaptionsStyle oldStyle;
-    ReadClosedCaptionsStyle(oldStyle);
-    ClosedCaptionsStyle style = oldStyle;
-    style.fontColor = color;
-    ApplyClosedCaptionsStyle(style);
-    if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
-        WriteClosedCaptionsStyle(style);
+    std::unique_lock lockSes{mSessionsMutex};
+    ClosedCaptionsStyle style;
+    {
+        std::unique_lock lockCfg{mConfigMutex};
+        ClosedCaptionsStyle oldStyle;
+        ReadClosedCaptionsStyle(oldStyle);
+        style = oldStyle;
+        style.fontColor = color;
+        if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
+            WriteClosedCaptionsStyle(style);
+        }
     }
+    ApplyClosedCaptionsStyle(style);
     return Core::ERROR_NONE;
 }
 
@@ -603,15 +619,19 @@ Core::hresult TextTrackImplementation::GetFontColor(string &color) const {
 }
 
 Core::hresult TextTrackImplementation::SetFontOpacity(const int8_t opacity) {
-    std::unique_lock lock{mConfigMutex};
-    ClosedCaptionsStyle oldStyle;
-    ReadClosedCaptionsStyle(oldStyle);
-    ClosedCaptionsStyle style = oldStyle;
-    style.fontOpacity = opacity;
-    ApplyClosedCaptionsStyle(style);
-    if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
-        WriteClosedCaptionsStyle(style);
+    std::unique_lock lockSes{mSessionsMutex};
+    ClosedCaptionsStyle style;
+    {
+        std::unique_lock lockCfg{mConfigMutex};
+        ClosedCaptionsStyle oldStyle;
+        ReadClosedCaptionsStyle(oldStyle);
+        style = oldStyle;
+        style.fontOpacity = opacity;
+        if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
+            WriteClosedCaptionsStyle(style);
+        }
     }
+    ApplyClosedCaptionsStyle(style);
     return Core::ERROR_NONE;
 }
 
@@ -624,15 +644,19 @@ Core::hresult TextTrackImplementation::GetFontOpacity(int8_t &opacity) const {
 }
 
 Core::hresult TextTrackImplementation::SetFontEdge(const FontEdge edge) {
-    std::unique_lock lock{mConfigMutex};
-    ClosedCaptionsStyle oldStyle;
-    ReadClosedCaptionsStyle(oldStyle);
-    ClosedCaptionsStyle style = oldStyle;
-    style.fontEdge = edge;
-    ApplyClosedCaptionsStyle(style);
-    if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
-        WriteClosedCaptionsStyle(style);
+    std::unique_lock lockSes{mSessionsMutex};
+    ClosedCaptionsStyle style;
+    {
+        std::unique_lock lockCfg{mConfigMutex};
+        ClosedCaptionsStyle oldStyle;
+        ReadClosedCaptionsStyle(oldStyle);
+        style = oldStyle;
+        style.fontEdge = edge;
+        if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
+            WriteClosedCaptionsStyle(style);
+        }
     }
+    ApplyClosedCaptionsStyle(style);
     return Core::ERROR_NONE;
 }
 
@@ -645,15 +669,19 @@ Core::hresult TextTrackImplementation::GetFontEdge(FontEdge &edge) const {
 }
 
 Core::hresult TextTrackImplementation::SetFontEdgeColor(const string &color) {
-    std::unique_lock lock{mConfigMutex};
-    ClosedCaptionsStyle oldStyle;
-    ReadClosedCaptionsStyle(oldStyle);
-    ClosedCaptionsStyle style = oldStyle;
-    style.fontEdgeColor = color;
-    ApplyClosedCaptionsStyle(style);
-    if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
-        WriteClosedCaptionsStyle(style);
+    std::unique_lock lockSes{mSessionsMutex};
+    ClosedCaptionsStyle style;
+    {
+        std::unique_lock lockCfg{mConfigMutex};
+        ClosedCaptionsStyle oldStyle;
+        ReadClosedCaptionsStyle(oldStyle);
+        style = oldStyle;
+        style.fontEdgeColor = color;
+        if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
+            WriteClosedCaptionsStyle(style);
+        }
     }
+    ApplyClosedCaptionsStyle(style);
     return Core::ERROR_NONE;
 }
 
@@ -666,15 +694,19 @@ Core::hresult TextTrackImplementation::GetFontEdgeColor(string &color) const {
 }
 
 Core::hresult TextTrackImplementation::SetBackgroundColor(const string &color) {
-    std::unique_lock lock{mConfigMutex};
-    ClosedCaptionsStyle oldStyle;
-    ReadClosedCaptionsStyle(oldStyle);
-    ClosedCaptionsStyle style = oldStyle;
-    style.backgroundColor = color;
-    ApplyClosedCaptionsStyle(style);
-    if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
-        WriteClosedCaptionsStyle(style);
+    std::unique_lock lockSes{mSessionsMutex};
+    ClosedCaptionsStyle style;
+    {
+        std::unique_lock lockCfg{mConfigMutex};
+        ClosedCaptionsStyle oldStyle;
+        ReadClosedCaptionsStyle(oldStyle);
+        style = oldStyle;
+        style.backgroundColor = color;
+        if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
+            WriteClosedCaptionsStyle(style);
+        }
     }
+    ApplyClosedCaptionsStyle(style);
     return Core::ERROR_NONE;
 }
 
@@ -687,15 +719,19 @@ Core::hresult TextTrackImplementation::GetBackgroundColor(string &color) const {
 }
 
 Core::hresult TextTrackImplementation::SetBackgroundOpacity(const int8_t opacity) {
-    std::unique_lock lock{mConfigMutex};
-    ClosedCaptionsStyle oldStyle;
-    ReadClosedCaptionsStyle(oldStyle);
-    ClosedCaptionsStyle style = oldStyle;
-    style.backgroundOpacity = opacity;
-    ApplyClosedCaptionsStyle(style);
-    if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
-        WriteClosedCaptionsStyle(style);
+    std::unique_lock lockSes{mSessionsMutex};
+    ClosedCaptionsStyle style;
+    {
+        std::unique_lock lockCfg{mConfigMutex};
+        ClosedCaptionsStyle oldStyle;
+        ReadClosedCaptionsStyle(oldStyle);
+        style = oldStyle;
+        style.backgroundOpacity = opacity;
+        if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
+            WriteClosedCaptionsStyle(style);
+        }
     }
+    ApplyClosedCaptionsStyle(style);
     return Core::ERROR_NONE;
 }
 
@@ -708,15 +744,19 @@ Core::hresult TextTrackImplementation::GetBackgroundOpacity(int8_t &opacity) con
 }
 
 Core::hresult TextTrackImplementation::SetWindowColor(const string &color) {
-    std::unique_lock lock{mConfigMutex};
-    ClosedCaptionsStyle oldStyle;
-    ReadClosedCaptionsStyle(oldStyle);
-    ClosedCaptionsStyle style = oldStyle;
-    style.windowColor = color;
-    ApplyClosedCaptionsStyle(style);
-    if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
-        WriteClosedCaptionsStyle(style);
+    std::unique_lock lockSes{mSessionsMutex};
+    ClosedCaptionsStyle style;
+    {
+        std::unique_lock lockCfg{mConfigMutex};
+        ClosedCaptionsStyle oldStyle;
+        ReadClosedCaptionsStyle(oldStyle);
+        style = oldStyle;
+        style.windowColor = color;
+        if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
+            WriteClosedCaptionsStyle(style);
+        }
     }
+    ApplyClosedCaptionsStyle(style);
     return Core::ERROR_NONE;
 }
 
@@ -729,15 +769,19 @@ Core::hresult TextTrackImplementation::GetWindowColor(string &color) const {
 }
 
 Core::hresult TextTrackImplementation::SetWindowOpacity(const int8_t opacity) {
-    std::unique_lock lock{mConfigMutex};
-    ClosedCaptionsStyle oldStyle;
-    ReadClosedCaptionsStyle(oldStyle);
-    ClosedCaptionsStyle style = oldStyle;
-    style.windowOpacity = opacity;
-    ApplyClosedCaptionsStyle(style);
-    if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
-        WriteClosedCaptionsStyle(style);
+    std::unique_lock lockSes{mSessionsMutex};
+    ClosedCaptionsStyle style;
+    {
+        std::unique_lock lockCfg{mConfigMutex};
+        ClosedCaptionsStyle oldStyle;
+        ReadClosedCaptionsStyle(oldStyle);
+        style = oldStyle;
+        style.windowOpacity = opacity;
+        if (CheckWhetherClosedCaptionsStyleChanged(style, oldStyle)) {
+            WriteClosedCaptionsStyle(style);
+        }
     }
+    ApplyClosedCaptionsStyle(style);
     return Core::ERROR_NONE;
 }
 
@@ -753,14 +797,17 @@ Core::hresult TextTrackImplementation::GetWindowOpacity(int8_t &opacity) const {
 // Functions from ITextTrackTtmlStyle interface
 
 Core::hresult TextTrackImplementation::SetTtmlStyleOverrides(const string &style) {
-    std::unique_lock lock{mConfigMutex};
-    string oldStyle;
-    ReadTtmlStyleOverrides(oldStyle);
-    ApplyTtmlStyleOverrides(style);
-    if (style != oldStyle) {
-        RaiseOnTtmlStyleOverridesChanged(style);
-        WriteTtmlStyleOverrides(style);
+    std::unique_lock lockSes{mSessionsMutex};
+    {
+        std::unique_lock lockCfg{mConfigMutex};
+        string oldStyle;
+        ReadTtmlStyleOverrides(oldStyle);
+        if (style != oldStyle) {
+            RaiseOnTtmlStyleOverridesChanged(style);
+            WriteTtmlStyleOverrides(style);
+        }
     }
+    ApplyTtmlStyleOverrides(style);
     return Core::ERROR_NONE;
 }
 
@@ -936,7 +983,7 @@ Core::hresult TextTrackImplementation::ResetSession(uint32_t iSessionId) {
 }
 
 Core::hresult TextTrackImplementation::SetSessionClosedCaptionsService(uint32_t iSessionId, const std::string &service) {
-    std::unique_lock lock{mSessionsMutex};
+    std::unique_lock lockSes{mSessionsMutex};
     auto ses_it = mSessions.find(iSessionId);
     if (ses_it != mSessions.end()) {
         RenderSession::CcServiceType type;
@@ -981,7 +1028,6 @@ void TextTrackImplementation::ApplyClosedCaptionsStyle(RenderSession &session, c
 void TextTrackImplementation::ApplyClosedCaptionsStyle(const ClosedCaptionsStyle &style) {
     const SubttxClosedCaptionsStyle subttxStyle = convertClosedCaptionsStyle(style);
 
-    std::unique_lock lock{mSessionsMutex};
     for (const auto &sess : mSessions) {
         ApplyClosedCaptionsStyle(*sess.second.session, subttxStyle);
     }
@@ -1018,13 +1064,13 @@ Core::hresult TextTrackImplementation::SetSessionWebVTTSelection(uint32_t iSessi
 }
 
 Core::hresult TextTrackImplementation::SetSessionTTMLSelection(uint32_t iSessionId) {
-    std::unique_lock lock{mSessionsMutex};
+    std::unique_lock lockSes{mSessionsMutex};
     auto ses_it = mSessions.find(iSessionId);
     if (ses_it != mSessions.end()) {
         ses_it->second.session->selectTtmlService(1920, 1080);
         if (!ses_it->second.session->hasCustomTtmlStyling()) {
             string style;
-            std::unique_lock lock{mConfigMutex};
+            std::unique_lock lockCfg{mConfigMutex};
             ReadTtmlStyleOverrides(style);
             if (!style.empty()) {
                 ses_it->second.session->applyTtmlStyling(style);
@@ -1052,7 +1098,6 @@ Core::hresult TextTrackImplementation::ApplyCustomTtmlStyleOverridesToSession(ui
 
 void TextTrackImplementation::ApplyTtmlStyleOverrides(const string &style) {
     // Apply to all TTML sessions, unless they already have a style override
-    std::unique_lock lock{mSessionsMutex};
     for (const auto &sess : mSessions) {
         if (!sess.second.session->hasCustomTtmlStyling()) {
             sess.second.session->applyTtmlStyling(style);
