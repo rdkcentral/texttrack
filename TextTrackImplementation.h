@@ -146,15 +146,16 @@ public:
 private:
     void ReadStyleSettings();
     // Will apply the style to all running sessions
+    // Call with mSessionsMutex acquired
     void ApplyClosedCaptionsStyle(const ClosedCaptionsStyle &style);
     // Will apply the style unless the session already has a custom styling
     void ApplyClosedCaptionsStyle(RenderSession &session, const SubttxClosedCaptionsStyle &style);
 
-    // Call with mConfigMutex taken
+    // Call with mConfigMutex acquired
     void ReadClosedCaptionsStyle(ClosedCaptionsStyle &style) const;
-    // Call with mConfigMutex taken
+    // Call with mConfigMutex acquired
     void WriteClosedCaptionsStyle(const ClosedCaptionsStyle &style);
-    // Call with mConfigMutex taken
+    // Call with mConfigMutex acquired
     bool CheckWhetherClosedCaptionsStyleChanged(const ClosedCaptionsStyle &style, const ClosedCaptionsStyle &oldStyle);
     void RaiseOnClosedCaptionsStyleChanged(const ClosedCaptionsStyle &style);
     void RaiseOnFontFamilyChanged(const FontFamily font);
@@ -168,10 +169,11 @@ private:
     void RaiseOnWindowColorChanged(const string &color);
     void RaiseOnWindowOpacityChanged(const int8_t opacity);
 
-    // Call with mConfigMutex taken
+    // Call with mConfigMutex acquired
     void ReadTtmlStyleOverrides(string &style) const;
-    // Call with mConfigMutex taken
+    // Call with mConfigMutex acquired
     void WriteTtmlStyleOverrides(const string &style);
+    // Call with mSessionsMutex acquired
     void ApplyTtmlStyleOverrides(const string &style);
     void RaiseOnTtmlStyleOverridesChanged(const string &style);
 
@@ -180,10 +182,14 @@ private:
     };
     subttxrend::ctrl::Options mOptions;
     subttxrend::ctrl::Configuration mConfiguration;
+    // Acquire mSessionsMutex before mConfigMutex. Acquire mConfigMutex before mNotificationMutex.
     mutable std::mutex mSessionsMutex;
+    // Protected by mSessionsMutex
     std::map<unsigned, SessionInfo> mSessions;
-    std::atomic<unsigned> mSessionNumber{0};
+    // Protected by mSessionsMutex
+    unsigned mSessionNumber{0};
 
+    // Protected by mNotificationMutex
     std::vector<ITextTrackClosedCaptionsStyle::INotification *> mNotificationCallbacks;
 #if ITEXTTRACK_VERSION >= 2
     std::vector<ITextTrackTtmlStyle::INotification *> mTtmlCallbacks;
@@ -191,6 +197,7 @@ private:
     std::mutex mNotificationMutex;
 
     // Interface for storing TextTrack configuration
+    // Protected by mConfigMutex
     mutable Exchange::IStore *mConfigStore{nullptr};
     mutable RPC::SmartInterfaceType<Exchange::IStore> mConfigPlugin;
     // Cached values for easier Get*
