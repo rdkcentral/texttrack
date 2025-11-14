@@ -104,6 +104,10 @@ if [ $CC = 1 ]; then
     jsonrpc setFontSize '{"size":"'$x'"}'
     sleep 2
   done
+  echo "Choose different CC service; text and style must remain on screen"
+  jsonrpc setSessionClosedCaptionsService '{"sessionId":'${sessionId}',"service":"CC3"}'
+  jsonrpc setPreviewText '{"sessionId":'${sessionId}', "text":"Changed text. Must keep style"}'
+  sleep 2
   echo "Reset style"
   jsonrpc setClosedCaptionsStyle '{"style":{"fontFamily":"CONTENT_DEFAULT","fontSize":"CONTENT_DEFAULT","fontColor":"","fontOpacity":-1,"fontEdge":"CONTENT_DEFAULT","fontEdgeColor":"","backgroundColor":"","backgroundOpacity":-1,"windowColor":"","windowOpacity":-1}}'
   sleep 1
@@ -149,7 +153,47 @@ TTMLCONTENT=$(sed -e 's/"/\\"/g' <<EOF
 EOF)
   # Use offset to get it displayed at time 8.5
   jsonrpc sendSessionData '{"sessionId":'${sessionId}',"type":"TTML","displayOffsetMs":-3500,"data":"'"$(<<< $TTMLCONTENT tr -d '\n')"'"}'
-  sleep 9
+  sleep 8
+  echo "Set TTML again; must display without explicit unmute"
+  jsonrpc setSessionTTMLSelection '{"sessionId":'${sessionId}'}'
+  echo "Set time to 19,8"
+  jsonrpc sendSessionTimestamp '{"sessionId":'${sessionId}',"mediaTimestampMs":19800}'
+TTMLCONTENT=$(sed -e 's/"/\\"/g' <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling" xmlns:ttp="http://www.w3.org/ns/ttml#parameter">
+<body>
+ <span>
+  <p begin="00:00:20" end="00:00:22">Keep style override: Teal on White</p>
+ </span>
+</body>
+</tt>
+EOF)
+  echo "Send data again (same style as before)"
+  jsonrpc sendSessionData '{"sessionId":'${sessionId}',"type":"TTML","displayOffsetMs":0,"data":"'"$(<<< $TTMLCONTENT tr -d '\n')"'"}'
+  sleep 3
+  echo "Reset session"
+  jsonrpc resetSession '{"sessionId":'${sessionId}'}'
+  echo "Set TTML again"
+  jsonrpc setSessionTTMLSelection '{"sessionId":'${sessionId}'}'
+  echo "Set time to 22,9"
+  jsonrpc sendSessionTimestamp '{"sessionId":'${sessionId}',"mediaTimestampMs":22900}'
+TTMLCONTENT=$(sed -e 's/"/\\"/g' <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<tt xmlns="http://www.w3.org/ns/ttml" xmlns:tts="http://www.w3.org/ns/ttml#styling" xmlns:ttp="http://www.w3.org/ns/ttml#parameter">
+<body>
+ <span>
+  <p begin="00:00:23" end="00:00:23.800">This line should disappear</p>
+  <p begin="00:00:24" end="00:00:27">Must use default style</p>
+ </span>
+</body>
+</tt>
+EOF)
+  echo "Send data again (must be default-styled)"
+  jsonrpc sendSessionData '{"sessionId":'${sessionId}',"type":"TTML","displayOffsetMs":0,"data":"'"$(<<< $TTMLCONTENT tr -d '\n')"'"}'
+  sleep 1
+  echo "Unmute"
+  jsonrpc unMuteSession '{"sessionId":'${sessionId}'}'
+  sleep 4
   echo "Mute"
   jsonrpc muteSession '{"sessionId":'${sessionId}'}'
   echo "Testing TTML - done"

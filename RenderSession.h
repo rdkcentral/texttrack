@@ -23,6 +23,7 @@
 #include <condition_variable>
 #include <deque>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <subttxrend/common/Logger.hpp>
 #include <subttxrend/ctrl/ControllerInterface.hpp>
@@ -52,6 +53,19 @@ class Configuration;
 
 namespace WPEFramework {
 namespace Plugin {
+
+struct SubttxClosedCaptionsStyle {
+    uint32_t fontColor = static_cast<uint32_t>(-1);
+    uint32_t fontOpacity = static_cast<uint32_t>(-1);
+    uint32_t fontStyle = static_cast<uint32_t>(-1);
+    uint32_t fontSize = static_cast<uint32_t>(-1);
+    uint32_t edgeType = static_cast<uint32_t>(-1);
+    uint32_t edgeColor = static_cast<uint32_t>(-1);
+    uint32_t backgroundColor = static_cast<uint32_t>(-1);
+    uint32_t backgroundOpacity = static_cast<uint32_t>(-1);
+    uint32_t windowColor = static_cast<uint32_t>(-1);
+    uint32_t windowOpacity = static_cast<uint32_t>(-1);
+};
 
 class RenderSession : public subttxrend::socksrc::PacketReceiver {
 public:
@@ -97,8 +111,6 @@ public:
     void mute();
     void unmute();
     void reset();
-    void setCcAttributes(uint32_t fontColor, uint32_t fontOpacity, uint32_t fontStyle, uint32_t fontSize, uint32_t edgeType, uint32_t edgeColor,
-                         uint32_t backgroundColor, uint32_t backgroundOpacity, uint32_t windowColor, uint32_t windowOpacity);
     void selectCcService(CcServiceType type, uint32_t iServiceId);
     void selectTtxService(uint16_t page);
     void selectDvbService(uint16_t compositionPageId, uint16_t ancillaryPageId);
@@ -106,11 +118,21 @@ public:
     void selectTtmlService(uint32_t iVideoWidth, uint32_t iVideoHeight);
     void selectScteService();
     void setTextForClosedCaptionPreview(const std::string &text);
+    void refreshClosedCaptionPreview();
     bool isRenderingActive() const;
     SessionType getSessionType() const;
+    // Only applies to CC session
+    // Sets and applies a session-local override and remembers it across calls to selectCcService
+    void setCustomCcStyling(const SubttxClosedCaptionsStyle &styling);
+    bool hasCustomCcStyling() const;
+    // Applies a CC styling for the current instance of CC, will be gone if selectCcService is called
+    void applyCcStyling(const SubttxClosedCaptionsStyle &styling);
     // Only applies to TTML session
-    void setCustomTtmlStyling(const std::string &styling);
+    // Sets and applies a session-local override and remembers it across calls to selectTtmlService
+    bool setCustomTtmlStyling(const std::string &styling);
     bool hasCustomTtmlStyling() const;
+    // Applies a TTML styling for the current instance of TTML subtitles, will be gone if selectTtmlService is called
+    bool applyTtmlStyling(const std::string &styling);
 
     // Functions from PacketReceiver interface
     virtual void onPacketReceived(const subttxrend::protocol::Packet &packet) override;
@@ -152,7 +174,8 @@ private:
     subttxrend::socksrc::SourcePtr mSocket;
     subttxrend::ctrl::StcProvider mStcProvider;
     std::string mPreviewText;
-    bool mHasCustomTtmlStyling = false;
+    std::optional<SubttxClosedCaptionsStyle> mCustomCcStyling;
+    std::string mCustomTtmlStyling;
     // Protects mDecoder, ...
     mutable std::mutex mDecoderMutex;
     std::unique_ptr<subttxrend::ctrl::ControllerInterface> mDecoder;
@@ -169,6 +192,7 @@ private:
     mutable std::mutex mDataMutex;
     std::deque<subttxrend::common::DataBufferPtr> mDataQueue;
     bool mHasAssociatedVideoDecoder = false;
+    bool mIsMuted = true;
 };
 
 } // namespace Plugin
