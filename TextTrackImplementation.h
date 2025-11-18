@@ -31,9 +31,9 @@
 
 #include <condition_variable>
 #include <optional>
-
 #include <subttxrend/ctrl/Configuration.hpp>
 #include <subttxrend/ctrl/Options.hpp>
+
 #include "TextTrackConfiguration.h"
 
 // Sanity check
@@ -47,9 +47,12 @@ namespace Plugin {
 class RenderSession;
 class SubttxClosedCaptionsStyle;
 
-class TextTrackImplementation : public Exchange::ITextTrack, public Exchange::ITextTrackClosedCaptionsStyle, public Exchange::IConfiguration
+class TextTrackImplementation : public Exchange::ITextTrack,
+                                public Exchange::ITextTrackClosedCaptionsStyle,
+                                public Exchange::IConfiguration
 #if ITEXTTRACK_VERSION >= 2
-, public Exchange::ITextTrackTtmlStyle
+    ,
+                                public Exchange::ITextTrackTtmlStyle
 #endif
 {
 public:
@@ -136,21 +139,23 @@ public:
     Core::hresult Unregister(const ITextTrackTtmlStyle::INotification *notification) override;
 
     Core::hresult SetTtmlStyleOverrides(const string &style) override;
-    Core::hresult GetTtmlStyleOverrides(string& style) const override;
+    Core::hresult GetTtmlStyleOverrides(string &style) const override;
 
     // @}
 #endif
-
 private:
     void ReadStyleSettings();
+    // Will apply the style to all running sessions
+    // Call with mSessionsMutex acquired
     void ApplyClosedCaptionsStyle(const ClosedCaptionsStyle &style);
+    // Will apply the style unless the session already has a custom styling
     void ApplyClosedCaptionsStyle(RenderSession &session, const SubttxClosedCaptionsStyle &style);
 
-    // Call with mConfigMutex taken
+    // Call with mConfigMutex acquired
     void ReadClosedCaptionsStyle(ClosedCaptionsStyle &style) const;
-    // Call with mConfigMutex taken
+    // Call with mConfigMutex acquired
     void WriteClosedCaptionsStyle(const ClosedCaptionsStyle &style);
-    // Call with mConfigMutex taken
+    // Call with mConfigMutex acquired
     bool CheckWhetherClosedCaptionsStyleChanged(const ClosedCaptionsStyle &style, const ClosedCaptionsStyle &oldStyle);
     void RaiseOnClosedCaptionsStyleChanged(const ClosedCaptionsStyle &style);
     void RaiseOnFontFamilyChanged(const FontFamily font);
@@ -164,12 +169,12 @@ private:
     void RaiseOnWindowColorChanged(const string &color);
     void RaiseOnWindowOpacityChanged(const int8_t opacity);
 
-    // Call with mConfigMutex taken
+    // Call with mConfigMutex acquired
     void ReadTtmlStyleOverrides(string &style) const;
-    // Call with mConfigMutex taken
+    // Call with mConfigMutex acquired
     void WriteTtmlStyleOverrides(const string &style);
+    // Call with mSessionsMutex acquired
     void ApplyTtmlStyleOverrides(const string &style);
-    bool ApplyTtmlStyleOverrides(RenderSession &session, const string &style);
     void RaiseOnTtmlStyleOverridesChanged(const string &style);
 
     struct SessionInfo {
@@ -177,10 +182,14 @@ private:
     };
     subttxrend::ctrl::Options mOptions;
     subttxrend::ctrl::Configuration mConfiguration;
+    // Acquire mSessionsMutex before mConfigMutex. Acquire mConfigMutex before mNotificationMutex.
     mutable std::mutex mSessionsMutex;
+    // Protected by mSessionsMutex
     std::map<unsigned, SessionInfo> mSessions;
-    std::atomic<unsigned> mSessionNumber{0};
+    // Protected by mSessionsMutex
+    unsigned mSessionNumber{0};
 
+    // Protected by mNotificationMutex
     std::vector<ITextTrackClosedCaptionsStyle::INotification *> mNotificationCallbacks;
 #if ITEXTTRACK_VERSION >= 2
     std::vector<ITextTrackTtmlStyle::INotification *> mTtmlCallbacks;
@@ -188,6 +197,7 @@ private:
     std::mutex mNotificationMutex;
 
     // Interface for storing TextTrack configuration
+    // Protected by mConfigMutex
     mutable Exchange::IStore *mConfigStore{nullptr};
     mutable RPC::SmartInterfaceType<Exchange::IStore> mConfigPlugin;
     // Cached values for easier Get*
@@ -205,7 +215,7 @@ private:
     typedef WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement> LinkType;
     LinkType *mpRdkShell{nullptr};
 
-    bool EnsureDisplayIsCreated(std::string const &displayName);
+    bool EnsureDisplayIsCreated(const std::string &displayName);
 #endif
 };
 

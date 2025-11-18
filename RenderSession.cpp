@@ -34,6 +34,7 @@
 #endif
 
 #include <subttxrend/ctrl/CcSubController.hpp>
+#include <subttxrend/ctrl/Configuration.hpp>
 #include <subttxrend/ctrl/DvbSubController.hpp>
 #include <subttxrend/ctrl/ScteSubController.hpp>
 #include <subttxrend/ctrl/TtmlController.hpp>
@@ -57,8 +58,6 @@
 #include <subttxrend/protocol/PacketWebvttSelection.hpp>
 #include <subttxrend/protocol/PacketWebvttTimestamp.hpp>
 #include <subttxrend/socksrc/UnixSocketSourceFactory.hpp>
-
-#include <subttxrend/ctrl/Configuration.hpp>
 
 namespace WPEFramework {
 namespace Plugin {
@@ -95,6 +94,7 @@ void RenderSession::start() {
         return;
     }
     mStarted = true;
+    mIsMuted = true;
     // Create graphics etc
     mLogger.osinfo(__LOGGER_FUNC__, " - creating GFX window");
     mGfxWindow = mGfxEngine->createWindow();
@@ -268,7 +268,7 @@ bool RenderSession::sendData(DataType type, const std::string &data, int64_t off
         case DataType::WEBVTT: {
             bp.type(Packet::Type::WEBVTT_DATA);
             // subttxrend-webvtt interprets positive as "earlier". We flip that.
-	    offsetMs = -offsetMs;
+            offsetMs = -offsetMs;
             bp(offsetMs & UINT32_MAX)(offsetMs >> 32); // 64-bit display-offset
             break;
         }
@@ -302,8 +302,7 @@ void RenderSession::sendTimestamp(uint64_t iMediaTimestampMs) {
             onPacketReceived(mParser.parse(bp));
             break;
         }
-        default:
-            ; // Unhandled
+        default:; // Unhandled
     }
 }
 
@@ -333,8 +332,7 @@ void RenderSession::unmute() {
     onPacketReceived(mParser.parse(bp));
 }
 
-void RenderSession::setCcAttributes(uint32_t fontColor, uint32_t fontOpacity, uint32_t fontStyle, uint32_t fontSize, uint32_t edgeType, uint32_t edgeColor,
-                                    uint32_t backgroundColor, uint32_t backgroundOpacity, uint32_t windowColor, uint32_t windowOpacity) {
+void RenderSession::applyCcStyling(const SubttxClosedCaptionsStyle &styling) {
     BuildPacket bp(subttxrend::protocol::Packet::Type::SET_CC_ATTRIBUTES);
     bp(1); // CC type, appears to be unused
     // Attribute mask for which attributes are set. We always set (almost) all of them.
@@ -351,25 +349,28 @@ void RenderSession::setCcAttributes(uint32_t fontColor, uint32_t fontOpacity, ui
                                           static_cast<uint32_t>(subttxrend::protocol::PacketSetCCAttributes::CcAttribType::EDGE_TYPE) |
                                           static_cast<uint32_t>(subttxrend::protocol::PacketSetCCAttributes::CcAttribType::EDGE_COLOR);
     bp(attributeMask);
-    bp(fontColor);         // PacketSetCCAttributes::CcAttribType::FONT_COLOR,
-    bp(backgroundColor);   // PacketSetCCAttributes::CcAttribType::BACKGROUND_COLOR,
-    bp(fontOpacity);       // PacketSetCCAttributes::CcAttribType::FONT_OPACITY,
-    bp(backgroundOpacity); // PacketSetCCAttributes::CcAttribType::BACKGROUND_OPACITY,
-    bp(fontStyle);         // PacketSetCCAttributes::CcAttribType::FONT_STYLE,
-    bp(fontSize);          // PacketSetCCAttributes::CcAttribType::FONT_SIZE,
-    bp(-1);                // PacketSetCCAttributes::CcAttribType::FONT_ITALIC,
-    bp(-1);                // PacketSetCCAttributes::CcAttribType::FONT_UNDERLINE,
-    bp(-1);                // PacketSetCCAttributes::CcAttribType::BORDER_TYPE,
-    bp(0xff000000);        // PacketSetCCAttributes::CcAttribType::BORDER_COLOR,
-    bp(windowColor);       // PacketSetCCAttributes::CcAttribType::WIN_COLOR,
-    bp(windowOpacity);     // PacketSetCCAttributes::CcAttribType::WIN_OPACITY,
-    bp(edgeType);          // PacketSetCCAttributes::CcAttribType::EDGE_TYPE,
-    bp(edgeColor);         // PacketSetCCAttributes::CcAttribType::EDGE_COLOR
+    bp(styling.fontColor);         // PacketSetCCAttributes::CcAttribType::FONT_COLOR,
+    bp(styling.backgroundColor);   // PacketSetCCAttributes::CcAttribType::BACKGROUND_COLOR,
+    bp(styling.fontOpacity);       // PacketSetCCAttributes::CcAttribType::FONT_OPACITY,
+    bp(styling.backgroundOpacity); // PacketSetCCAttributes::CcAttribType::BACKGROUND_OPACITY,
+    bp(styling.fontStyle);         // PacketSetCCAttributes::CcAttribType::FONT_STYLE,
+    bp(styling.fontSize);          // PacketSetCCAttributes::CcAttribType::FONT_SIZE,
+    bp(-1);                        // PacketSetCCAttributes::CcAttribType::FONT_ITALIC,
+    bp(-1);                        // PacketSetCCAttributes::CcAttribType::FONT_UNDERLINE,
+    bp(-1);                        // PacketSetCCAttributes::CcAttribType::BORDER_TYPE,
+    bp(0xff000000);                // PacketSetCCAttributes::CcAttribType::BORDER_COLOR,
+    bp(styling.windowColor);       // PacketSetCCAttributes::CcAttribType::WIN_COLOR,
+    bp(styling.windowOpacity);     // PacketSetCCAttributes::CcAttribType::WIN_OPACITY,
+    bp(styling.edgeType);          // PacketSetCCAttributes::CcAttribType::EDGE_TYPE,
+    bp(styling.edgeColor);         // PacketSetCCAttributes::CcAttribType::EDGE_COLOR
     onPacketReceived(mParser.parse(bp));
-    {
-        LockGuard lock{mDecoderMutex};
-        // If we have a preview text, refresh it to make the style take effect
-        if (!mPreviewText.empty() && mDecoder && mSessionType == SessionType::CC) {
+}
+
+void RenderSession::refreshClosedCaptionPreview() {
+    // If we have a preview text, refresh it to make the style take effect
+    LockGuard lock{mDecoderMutex};
+    if (!mPreviewText.empty()) {
+        if (mDecoder && mSessionType == SessionType::CC) {
             if (auto *const ccDecoder = static_cast<subttxrend::ctrl::CcSubController *>(mDecoder.get())) {
                 ccDecoder->setTextForPreview(mPreviewText);
             }
@@ -425,18 +426,37 @@ void RenderSession::setTextForClosedCaptionPreview(const std::string &text) {
     }
 }
 
-void RenderSession::setCustomTtmlStyling(const std::string &styling) {
+void RenderSession::setCustomCcStyling(const SubttxClosedCaptionsStyle &styling) {
+    applyCcStyling(styling);
+    refreshClosedCaptionPreview();
+    mCustomCcStyling = styling;
+}
+
+bool RenderSession::hasCustomCcStyling() const {
+    return mCustomCcStyling.has_value();
+}
+
+bool RenderSession::setCustomTtmlStyling(const std::string &styling) {
+    if (applyTtmlStyling(styling)) {
+        mCustomTtmlStyling = styling;
+        return true;
+    }
+    return false;
+}
+
+bool RenderSession::hasCustomTtmlStyling() const {
+    return !mCustomTtmlStyling.empty();
+}
+
+bool RenderSession::applyTtmlStyling(const std::string &styling) {
     UniqueLock lock{mDecoderMutex};
     mLogger.osinfo(__LOGGER_FUNC__, " styling=", styling, " mSessionType=", static_cast<int>(mSessionType));
     if (mDecoder && mSessionType == SessionType::TTML) {
         auto *const ttmlDecoder = static_cast<subttxrend::ctrl::TtmlController *>(mDecoder.get());
         ttmlDecoder->setCustomTtmlStyling(styling);
-        mHasCustomTtmlStyling = !styling.empty();
+        return true;
     }
-}
-
-bool RenderSession::hasCustomTtmlStyling() const {
-    return mHasCustomTtmlStyling;
+    return false;
 }
 
 // Thread function
@@ -461,9 +481,7 @@ void RenderSession::processLoop() {
 }
 
 void RenderSession::onPacketReceived(const subttxrend::protocol::Packet &packet) {
-    {
-        doOnPacketReceived(packet);
-    }
+    doOnPacketReceived(packet);
     mRenderCond.notify_one();
 }
 
@@ -597,11 +615,19 @@ void RenderSession::processDecoderSelection(const subttxrend::protocol::PacketCh
                     mDecoder.reset(new ctrl::ScteSubController(packet, mGfxWindow, mStcProvider));
                     mSessionType = SessionType::SCTE;
                     break;
-                case protocol::PacketSubtitleSelection::SUBTITLES_TYPE_CC:
+                case protocol::PacketSubtitleSelection::SUBTITLES_TYPE_CC: {
                     mFontCache = std::make_shared<subttxrend::gfx::PrerenderedFontCache>();
-                    mDecoder.reset(new ctrl::CcSubController(packet, mGfxWindow, mFontCache));
+                    auto *ccDecoder = new ctrl::CcSubController(packet, mGfxWindow, mFontCache);
+                    mDecoder.reset(ccDecoder);
                     mSessionType = SessionType::CC;
+                    if (mCustomCcStyling.has_value()) {
+                        applyCcStyling(*mCustomCcStyling);
+                    }
+                    if (!mPreviewText.empty()) {
+                        ccDecoder->setTextForPreview(mPreviewText);
+                    }
                     break;
+                }
                 case protocol::PacketSubtitleSelection::SUBTITLES_TYPE_TELETEXT:
                     mDecoder.reset(new ctrl::TtxController(packet, mConfiguration.getTeletextConfig(), mGfxWindow, mGfxEngine, mStcProvider));
                     mSessionType = SessionType::TTX;
@@ -617,10 +643,15 @@ void RenderSession::processDecoderSelection(const subttxrend::protocol::PacketCh
             mDecoder.reset(new ctrl::TtxController(packet, mConfiguration.getTeletextConfig(), mGfxWindow, mGfxEngine, mStcProvider));
             mSessionType = SessionType::TTX;
             break;
-        case protocol::Packet::Type::TTML_SELECTION:
-            mDecoder.reset(new ctrl::TtmlController(packet, mConfiguration.getTtmlConfig(), mGfxWindow, {}));
+        case protocol::Packet::Type::TTML_SELECTION: {
+            auto *ttmlDecoder = new ctrl::TtmlController(packet, mConfiguration.getTtmlConfig(), mGfxWindow, {});
+            mDecoder.reset(ttmlDecoder);
             mSessionType = SessionType::TTML;
+            if (!mCustomTtmlStyling.empty()) {
+                ttmlDecoder->setCustomTtmlStyling(mCustomTtmlStyling);
+            }
             break;
+        }
         case protocol::Packet::Type::WEBVTT_SELECTION:
             mDecoder.reset(new ctrl::WebvttController(packet, mConfiguration.getWebvttConfig(), mGfxWindow));
             mSessionType = SessionType::WEBVTT;
@@ -629,6 +660,9 @@ void RenderSession::processDecoderSelection(const subttxrend::protocol::PacketCh
             mLogger.oserror(__LOGGER_FUNC__, " unknown subtitle selection type=", packet.getType());
             mDecoder.reset();
             break;
+    }
+    if (mDecoder) {
+        mDecoder->mute(mIsMuted);
     }
     mLogger.osinfo("DecoderSelection ends mDecoder=", mDecoder.get(), " mSessionType=", static_cast<int>(mSessionType));
 }
@@ -642,6 +676,7 @@ void RenderSession::processDataPacket(const subttxrend::protocol::PacketData &pa
 void RenderSession::processMutePacket(const subttxrend::protocol::PacketMute &packet) {
     if (mDecoder) {
         mDecoder->mute(true);
+        mIsMuted = true;
     }
 }
 
@@ -649,6 +684,7 @@ void RenderSession::processUnmutePacket(const subttxrend::protocol::PacketUnmute
     mLogger.osinfo("Unmute mDecoder=", mDecoder.get(), " mSessionType=", static_cast<int>(mSessionType));
     if (mDecoder) {
         mDecoder->mute(false);
+        mIsMuted = false;
     }
 }
 
@@ -670,12 +706,19 @@ void RenderSession::processResetAll(const subttxrend::protocol::PacketResetAll &
 }
 
 void RenderSession::processResetChannel(const subttxrend::protocol::PacketResetChannel &packet) {
+#if TEXTTRACK_WITH_CCHAL
+    dissociateVideoDecoder();
+#endif
     if (mDecoder) {
         if (mDecoder->wantsData(packet)) {
             mDecoder->deactivate();
             mDecoder.reset();
         }
     }
+    mIsMuted = true;
+    mCustomCcStyling.reset();
+    mPreviewText.clear();
+    mCustomTtmlStyling.clear();
 }
 
 void RenderSession::processPause(const subttxrend::protocol::PacketPause &packet) {
@@ -720,16 +763,14 @@ bool RenderSession::isDataQueued() const {
 
 #if TEXTTRACK_WITH_CCHAL
 extern "C" {
-    // The callbacks we need for CC HAL
-    void dataCallback(void *context, int decoderIndex, VL_CC_DATA_TYPE eType,
-                                 unsigned char* ccData, unsigned dataLength,
-                                 int sequenceNumber, long long localPts) {
-        if (dataLength > 0) {
-            reinterpret_cast<RenderSession *>(context)->sendData(RenderSession::DataType::CC, std::string(reinterpret_cast<char *>(ccData), dataLength), 0);
-        }
+// The callbacks we need for CC HAL
+void dataCallback(void *context, int decoderIndex, VL_CC_DATA_TYPE eType, unsigned char *ccData, unsigned dataLength, int sequenceNumber, long long localPts) {
+    if (dataLength > 0) {
+        reinterpret_cast<RenderSession *>(context)->sendData(RenderSession::DataType::CC, std::string(reinterpret_cast<char *>(ccData), dataLength), 0);
     }
-    void decodeCallback(void *context, int decoderIndex, int event) {
-    }
+}
+void decodeCallback(void *context, int decoderIndex, int event) {
+}
 }
 
 bool RenderSession::associateVideoDecoder(const std::string &handle) {
